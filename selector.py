@@ -1,3 +1,9 @@
+
+
+
+#----
+#Required Packages
+#----
 import folium
 import streamlit as st
 from streamlit_folium import folium_static, st_folium
@@ -6,6 +12,13 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import LineString, Polygon
 import geojson
+#----
+
+
+st.set_page_config(
+    page_title="County-Selector"
+)
+
 
 st.title("US County Selector")
 
@@ -20,10 +33,32 @@ counties_dat = "C:/Users/simra/Desktop/Shapefiles/cb_2018_us_county_20m/cb_2018_
 # Read the counties GeoJSON file as a GeoDataFrame
 counties_data = gpd.read_file(counties_dat)
 
+with st.sidebar:
+    if st.button('Refresh Map'):
+        st.session_state["markers"] = []
+
+    st.write("Pick Color for County Boundary")
+
+    color = st.color_picker('Pick A Color', '#000000')  # Default color if the checkbox is selected
+
+    st.write("## Upload Section")
+    st.write(
+        "To select counties, draw a line using the draw tool on the map AND enter a buffer distance in miles."
+    )
+    bd = st.text_input("Buffer Distance (miles)")
+    st.write(
+        "Upload CSV File to merge. CSV file should have a field named 'FIPS', which includes the 5-digit county code."
+        )
+    fd = st.file_uploader("Upload CSV file")
+
+
 # Create the initial map
-style_func = lambda x: {'fillColor': 'grey', 'color': 'blue', 'weight': 0.5, 'fillOpacity': 0.6}
-m = folium.Map(use_container_width=True, location=[37.0902, -60.7129], zoom_start=4, control_scale=True)
-folium.GeoJson(counties_data, style_function=style_func, tooltip=folium.features.GeoJsonTooltip(fields=['NAME', 'GEOID'], aliases=['County Name: ', 'FIPS: '])).add_to(m)
+style_func = lambda x: {'fillColor': 'grey', 'color': color, 'weight': 0.5, 'fillOpacity': 0.6}
+style = {'fillColor': '#00FFFFFF', 'lineColor': '#00FFFFFF'}
+
+m = folium.Map(location=[37.0902, -66.7129], zoom_start=4, control_scale=True)
+folium.GeoJson(counties_data, style_function=style_func, 
+               tooltip=folium.features.GeoJsonTooltip(fields=['NAME', 'GEOID'], aliases=['County Name: ', 'FIPS: '])).add_to(m)
 
 fg = folium.FeatureGroup(name="Markers")
 
@@ -38,7 +73,8 @@ draw.add_to(m)
 # Display the map in Streamlit
 map = st_folium(m,
     feature_group_to_add=fg,
-    width=1500)
+    width=1800,  
+    height=500)
 
 #Functions
 
@@ -50,13 +86,11 @@ def add_intersecting_polygons_to_map(linestring, buffer_distance):
     buffered_line = linestring.buffer(buffer_distance)
     intersecting_polygons = counties_data[counties_data.geometry.intersects(buffered_line)]
 
-    style = {'fillColor': '#00FFFFFF', 'lineColor': '#00FFFFFF'}
     intersect = folium.GeoJson(intersecting_polygons,
-                               tooltip=folium.features.GeoJsonTooltip(fields=['NAME', 'GEOID'], aliases=['County Name: ', 'FIPS: ']),
-                               style_function = lambda x: style)
+                               tooltip=folium.features.GeoJsonTooltip(fields=['NAME', 'GEOID'], aliases=['Selected County Name: ', 'FIPS: ']))
     buffer = folium.GeoJson(buffered_line)
-    st.session_state["markers"].append(intersect)
     st.session_state["markers"].append(buffer)
+    st.session_state["markers"].append(intersect)
 
     global map
     #map = st_folium(m)
@@ -66,7 +100,7 @@ def add_intersecting_polygons_to_map(linestring, buffer_distance):
 
 def make_linestring():
     # Buffered distances
-    buffer_dist = st.text_input("Buffer Distance (miles)")
+    buffer_dist = bd
     buffer_distance_miles = int(buffer_dist) if buffer_dist else None
 
     # Calling from data stored in st_folium
@@ -95,12 +129,11 @@ def make_linestring():
 
 
 def upload_csv(display_data):
-    uploaded_file = st.file_uploader("Upload CSV file")
+    uploaded_file = fd
     if uploaded_file is not None:
         csv_data = pd.read_csv(uploaded_file)
         csv_data['FIPS'] = csv_data['FIPS'].astype(int)
-        display_data['FIPS'] = display_data['FIPS'].astype(int)  # Convert FIPS column to string type
-        st.write(csv_data)
+        display_data['FIPS'] = display_data['FIPS'].astype(int) 
         merged_csv = display_data.merge(csv_data, how="inner", on="FIPS")
         st.write(merged_csv)
     
@@ -116,4 +149,4 @@ upload_csv(display_data)
 
 
 
-add_road_network_map()
+#add_road_network_map()
