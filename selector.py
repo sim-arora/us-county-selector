@@ -1,8 +1,9 @@
-
+# Geospatial Querying Tool
+# County Shapefile: https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html
 
 
 #----
-#Required Packages
+# Required Packages
 #----
 import folium
 import streamlit as st
@@ -14,24 +15,16 @@ from shapely.geometry import LineString, Polygon
 import geojson
 #----
 
+#----
+# Page Setup
 
 st.set_page_config(
     page_title="County-Selector"
 )
 
-
 st.title("US County Selector")
 
-# Initializing marker (dynamically adding layers)
-
-if 'markers' not in st.session_state:
-    st.session_state["markers"] = []
-
-# Set the path to the counties GeoJSON file
-counties_dat = "C:/Users/simra/Desktop/Shapefiles/cb_2018_us_county_20m/cb_2018_us_county_20m.shp"
-
-# Read the counties GeoJSON file as a GeoDataFrame
-counties_data = gpd.read_file(counties_dat)
+st.write("This tool displays US County Boundaries from US Census Bureau's Cartographic Boundary Files. Draw a line to create a buffer (in miles) to select and display the intersecting counties. Additionally, you can add a road network file (.shp) from the sidebar and enter a buffer distance to highlight the intersecting counties. The resulting table can be converted into a .csv file. To add your own data to the selected counties, upload a .csv file with a FIPS code field in the sidebar.")
 
 with st.sidebar:
     if st.button('Refresh Map'):
@@ -51,36 +44,46 @@ with st.sidebar:
         )
     fd = st.file_uploader("Upload CSV file")
 
+#---
+
+#----
+# Basemap with US Counties
+
+# Initializing session state for streamlit
+if 'markers' not in st.session_state:
+    st.session_state["markers"] = []
+
+fg = folium.FeatureGroup(name="Markers")
+for marker in st.session_state["markers"]:
+    fg.add_child(marker)
+
+# Set the path to the counties GeoJSON file
+counties_dat = "c:/Users/aroras4/Desktop/Shapefiles/cb_2018_us_county_20m.shp"
+
+# Read the counties GeoJSON file as a geodataframe
+counties_data = gpd.read_file(counties_dat)
 
 # Create the initial map
 style_func = lambda x: {'fillColor': 'grey', 'color': color, 'weight': 0.5, 'fillOpacity': 0.6}
 style = {'fillColor': '#00FFFFFF', 'lineColor': '#00FFFFFF'}
-
-m = folium.Map(location=[37.0902, -66.7129], zoom_start=4, control_scale=True)
+m = folium.Map(location=[38, -96.5], zoom_start=4, control_scale=True)
 folium.GeoJson(counties_data, style_function=style_func, 
                tooltip=folium.features.GeoJsonTooltip(fields=['NAME', 'GEOID'], aliases=['County Name: ', 'FIPS: '])).add_to(m)
 
-fg = folium.FeatureGroup(name="Markers")
-
-for marker in st.session_state["markers"]:
-    fg.add_child(marker)
-
-
-# Add the Draw plugin to enable drawing on the map
+# Folium draw plugin for draw features
 draw = Draw()
 draw.add_to(m)
 
-# Display the map in Streamlit
+# Display the map 
 map = st_folium(m,
     feature_group_to_add=fg,
     width=1800,  
     height=500)
+#----
 
-#Functions
 
-def distance_conversion(distance):
-    return distance * 0.01 * 2
-
+#---
+# Functions
 
 def add_intersecting_polygons_to_map(linestring, buffer_distance):
     buffered_line = linestring.buffer(buffer_distance)
@@ -89,14 +92,15 @@ def add_intersecting_polygons_to_map(linestring, buffer_distance):
     intersect = folium.GeoJson(intersecting_polygons,
                                tooltip=folium.features.GeoJsonTooltip(fields=['NAME', 'GEOID'], aliases=['Selected County Name: ', 'FIPS: ']))
     buffer = folium.GeoJson(buffered_line)
-    st.session_state["markers"].append(buffer)
+    st.session_state["markers"].append(buffer) #Send data to session state
     st.session_state["markers"].append(intersect)
 
     global map
-    #map = st_folium(m)
 
     return intersecting_polygons
 
+def distance_conversion(distance): #Convert to miles. Buffer radius.
+    return distance * 0.01 * 2
 
 def make_linestring():
     # Buffered distances
@@ -104,11 +108,13 @@ def make_linestring():
     buffer_distance_miles = int(buffer_dist) if buffer_dist else None
 
     # Calling from data stored in st_folium
-    if "last_active_drawing" in map and "geometry" in map["last_active_drawing"] and \
+    if "last_active_drawing" in map is not None and "geometry" in map["last_active_drawing"] is not None and \
             "coordinates" in map["last_active_drawing"]["geometry"] is not None:
         linestring = LineString(map["last_active_drawing"]["geometry"]["coordinates"])
     else:
         linestring = LineString()
+
+        return linestring
 
     if linestring and buffer_distance_miles:
         buffer_distance_meters = distance_conversion(buffer_distance_miles)
