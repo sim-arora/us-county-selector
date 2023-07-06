@@ -19,6 +19,7 @@ import geojson
 # Page Setup
 
 st.set_page_config(
+    layout="wide",
     page_title="County-Selector"
 )
 
@@ -27,14 +28,16 @@ st.title("US County Selector")
 st.write("This tool displays US County Boundaries from US Census Bureau's Cartographic Boundary Files. Draw a line to create a buffer (in miles) to select and display the intersecting counties. Additionally, you can add a road network file (.shp) from the sidebar and enter a buffer distance to highlight the intersecting counties. The resulting table can be converted into a .csv file. To add your own data to the selected counties, upload a .csv file with a FIPS code field in the sidebar.")
 
 with st.sidebar:
+    st.write("## Map Options")
+
     if st.button('Refresh Map'):
         st.session_state["markers"] = []
 
     st.write("Pick Color for County Boundary")
 
-    color = st.color_picker('Pick A Color', '#000000')  # Default color if the checkbox is selected
+    color = st.color_picker('Color Selector', '#000000')  # Default color if the checkbox is selected
 
-    st.write("## Upload Section")
+    st.write("## Manual Draw Option")
     st.write(
         "To select counties, draw a line using the draw tool on the map AND enter a buffer distance in miles."
     )
@@ -43,6 +46,10 @@ with st.sidebar:
         "Upload CSV File to merge. CSV file should have a field named 'FIPS', which includes the 5-digit county code."
         )
     fd = st.file_uploader("Upload CSV file")
+
+    st.write("## Road Network Option")
+    roads = st.file_uploader("Upload Road Network Here")
+    road_buffer = st.text_input("Buffer Road Distance (miles)")
 
 #---
 
@@ -58,7 +65,7 @@ for marker in st.session_state["markers"]:
     fg.add_child(marker)
 
 # Set the path to the counties GeoJSON file
-counties_dat = "c:/Users/aroras4/Desktop/Shapefiles/cb_2018_us_county_20m.shp"
+counties_dat = "C:/Users/simra/Desktop/Shapefiles/cb_2018_us_county_20m/cb_2018_us_county_20m.shp"
 
 # Read the counties GeoJSON file as a geodataframe
 counties_data = gpd.read_file(counties_dat)
@@ -66,7 +73,7 @@ counties_data = gpd.read_file(counties_dat)
 # Create the initial map
 style_func = lambda x: {'fillColor': 'grey', 'color': color, 'weight': 0.5, 'fillOpacity': 0.6}
 style = {'fillColor': '#00FFFFFF', 'lineColor': '#00FFFFFF'}
-m = folium.Map(location=[38, -96.5], zoom_start=4, control_scale=True)
+m = folium.Map(location=[38, -80.5], zoom_start=4, control_scale=True)
 folium.GeoJson(counties_data, style_function=style_func, 
                tooltip=folium.features.GeoJsonTooltip(fields=['NAME', 'GEOID'], aliases=['County Name: ', 'FIPS: '])).add_to(m)
 
@@ -79,6 +86,30 @@ map = st_folium(m,
     feature_group_to_add=fg,
     width=1800,  
     height=500)
+
+# Road Network Uploader
+
+def add_road_network_map():
+    intersecting_roads = gpd.sjoin(counties_data, roads_gdf, op="intersects").drop_duplicates(subset=['GEOID'])
+    intersecting_roads_map = folium.GeoJson(intersecting_roads,
+                                            tooltip=folium.features.GeoJsonTooltip(fields=['NAME', 'GEOID'], aliases=['Selected County Name: ', 'FIPS: ']))
+
+    display_data_road = intersecting_roads[['STATEFP', 'COUNTYFP', 'GEOID', 'NAME']]
+    display_data_road.columns = ['STATE CODE', 'COUNTY CODE', 'FIPS', 'COUNTY NAME']
+
+    st.session_state["markers"].append(intersecting_roads_map)
+    st.write("Counties Intersecting with Road Network and Buffer")
+    st.write(display_data_road)
+    roads_csv_data = display_data_road.to_csv(index=False)
+
+    global map
+    return roads_csv_data
+
+if roads is not None:
+    roads_gdf = gpd.read_file(roads)
+    folium.GeoJson(roads_gdf).add_to(m)
+    add_road_network_map()
+
 #----
 
 
@@ -103,7 +134,6 @@ def distance_conversion(distance): #Convert to miles. Buffer radius.
     return distance * 0.01 * 2
 
 def make_linestring():
-    # Buffered distances
     buffer_dist = bd
     buffer_distance_miles = int(buffer_dist) if buffer_dist else None
 
@@ -123,6 +153,7 @@ def make_linestring():
         merged_data = counties_data.merge(intersecting_polygons, how="right", on="geometry")
         display_data = merged_data[['STATEFP_x', 'COUNTYFP_x', 'GEOID_x', 'NAME_x']]
         display_data.columns = ['STATE CODE', 'COUNTY CODE', 'FIPS', 'COUNTY NAME']
+        st.write("Counties Intersecting with Line and Buffer")
         st.write(display_data)
 
         if st.button('Create CSV'):
@@ -148,11 +179,12 @@ def upload_csv(display_data):
             st.download_button(label='Click to download', data=csv_data, file_name='data_merged.csv', mime='text/csv')
 
     return None
-       
+
+
+#----
+# Calling functions
 
 display_data = make_linestring()
 upload_csv(display_data)
 
-
-
-#add_road_network_map()
+#----
