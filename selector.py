@@ -65,7 +65,7 @@ for marker in st.session_state["markers"]:
     fg.add_child(marker)
 
 # Set the path to the counties GeoJSON file
-counties_dat = "C:/Users/simra/Desktop/Shapefiles/cb_2018_us_county_20m/cb_2018_us_county_20m.shp"
+counties_dat = "c:/Users/aroras4/Desktop/Shapefiles/cb_2018_us_county_20m.shp"
 
 # Read the counties GeoJSON file as a geodataframe
 counties_data = gpd.read_file(counties_dat)
@@ -105,9 +105,13 @@ def add_road_network_map():
     global map
     return roads_csv_data
 
+
+
 if roads is not None:
     roads_gdf = gpd.read_file(roads)
-    folium.GeoJson(roads_gdf).add_to(m)
+    style1 = {'lineColor': '#000000'}
+    roads_map = folium.GeoJson(roads_gdf, style_function= lambda x: style1).add_to(m)
+    st.session_state["markers"].append(roads_map)
     add_road_network_map()
 
 #----
@@ -131,7 +135,8 @@ def add_intersecting_polygons_to_map(linestring, buffer_distance):
     return intersecting_polygons
 
 def distance_conversion(distance): #Convert to miles. Buffer radius.
-    return distance * 0.01 * 2
+    return distance * 0.016 
+
 
 def make_linestring():
     buffer_dist = bd
